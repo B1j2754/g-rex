@@ -1,0 +1,44 @@
+{
+    "name": "grex-vscode",
+    "displayName": "g-rex",
+    "version": "0.0.1",
+    "private": true,
+    "engines": {
+        "vscode": "^1.90.0"
+    },
+    "main": "./dist/extension.cjs",
+    "contributes": {
+        "languages": [
+            {
+                "id": "grex",
+                "aliases": [
+                    "g-rex"
+                ],
+                "extensions": [
+                    ".grex"
+                ],
+                "filenamePatterns": [
+                    "*.grex.txt"
+                ],
+                "configuration": "./language-configuration.json"
+            }
+        ],
+        "grammars": [
+            {
+                "language": "grex",
+                "scopeName": "source.grex",
+                "path": "./syntaxes/grex.tmLanguage.json"
+            }
+        ]
+    },
+    "dependencies": {
+        "@g-rex/core": "workspace:*"
+    },
+    "devDependencies": {
+        "@types/vscode": "^1.90.0"
+    },
+    "scripts": {
+        "typecheck": "tsc --noEmit",
+        "build": "bun build ./src/extension.ts --outfile ./dist/extension.cjs --format cjs --target node --external vscode"
+    }
+}

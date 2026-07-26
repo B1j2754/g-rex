@@ -1,0 +1,14 @@
+{
+    "name": "@g-rex/core",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "exports": {
+        ".": "./src/index.ts",
+        "./ast": "./src/ast/index.ts"
+    },
+    "scripts": {
+        "typecheck": "tsc --noEmit",
+        "test": "bun test"
+    }
+}

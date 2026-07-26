@@ -1,0 +1,15 @@
+{
+    "name": "@g-rex/cli",
+    "version": "0.0.0",
+    "type": "module",
+    "bin": {
+        "grex": "./src/cli.ts"
+    },
+    "dependencies": {
+        "@g-rex/core": "workspace:*"
+    },
+    "scripts": {
+        "typecheck": "tsc --noEmit",
+        "build": "bun build ./src/cli.ts --compile --outfile ../../dist/grex"
+    }
+}
