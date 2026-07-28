@@ -1,4 +1,5 @@
-import { type Tok, type TokType } from "./Token";
+import { Keywords, Symbols, type KwardTokType, type SymbolTokType, type Tok, type TokType } from "./Token";
+import { Diagnostics } from "../diagnostics/Diagnostics";
 
 enum State {
     Start,
@@ -11,8 +12,11 @@ enum State {
     DocComment,
 }
 
-const StringQuotes = { Double: '"', Single: "'" } as const;
+const StringQuotes = { Double: '"', Single: "'", Raw: "`" } as const;
 type StringType = typeof StringQuotes[keyof typeof StringQuotes];
+const Quotes = new Set<string>(Object.values(StringQuotes));
+
+const StringEscapes: Record<string, string> = { n: "\n", t: "\t", r: "\r", "0": "\0" };
 
 export class Lexer {
     // Position tracking
@@ -27,20 +31,26 @@ export class Lexer {
     private state: State = State.Start; // FSM State
     private buffer = "";
     private quoteType: StringType | null = null;
+    private isEscaped = false;
+    private isRaw = false;
 
     // Final
     private tokens: Tok[] = [];
 
+    constructor(private readonly diagnostics: Diagnostics = new Diagnostics()) {}
+
     tokenize(src: string): Tok[] {
         this.src = src;
         this.position = 0; // Char # of src
-        this.line = 1;
         this.line = this.col = 1;
-        this.lineStart = this.colStart = 0;
+        this.lineStart = this.colStart = 1;
 
         this.state = State.Start;
         this.buffer = "";
         this.quoteType = null;
+        this.isEscaped = false;
+        this.isRaw = false;
+        this.tokens = [];
 
         while (this.position < this.src.length) {
             const char = this.peek();
@@ -53,13 +63,37 @@ export class Lexer {
 
             if (this.position === posBefore && this.state === stateBefore) {
                 throw new Error(
-                    `Internal lexer error: no forward progress in state ${State[this.state]} ` +
-                    `on ${JSON.stringify(char)} at line ${this.line}, column ${this.col}`
+                    `Internal lexer error: no forward progress in state ${State[this.state]} `
+                    + `on ${JSON.stringify(char)} at line ${this.line}, column ${this.col}`
                 );
             }
         }
 
+        this.finish();
         return this.tokens;
+    }
+
+    private finish() {
+        switch (this.state) {
+            case State.Number:
+                this.emit("Number");
+                break;
+            case State.Identifier:
+                this.emitWord();
+                break;
+            case State.SingleComment:
+                this.emit("CommentSingle");
+                break;
+            case State.String:
+                this.error(`Unterminated string (expected closing ${this.quoteType})`);
+                break;
+            case State.MultiComment:
+                this.error("Unterminated block comment (expected `*/`)");
+                break;
+            case State.DocComment:
+                this.error("Unterminated doc comment (expected `*/`)");
+                break;
+        }
     }
 
     // --- Helpers ---
@@ -106,6 +140,23 @@ export class Lexer {
         this.state = State.Start;
     }
 
+    // A word is a keyword if it is spelled like one, an identifier otherwise.
+    private emitWord() {
+        this.emit(Keywords.has(this.buffer) ? (this.buffer as KwardTokType) : "Identifier");
+    }
+
+    private error(message: string) {
+        this.diagnostics.report({
+            stage: "lexer",
+            message,
+            start: { line: this.lineStart, column: this.colStart },
+            end: { line: this.line, column: this.col },
+        });
+
+        this.buffer = message;
+        this.emit("ErrorTok");
+    }
+
     // --- Main Logic ---
     private processChar(char: string) {
         if (this.state === State.Start)
@@ -114,7 +165,112 @@ export class Lexer {
             this.processState(char);
     }
 
-    private processStartState(char: string) {}
+    private processStartState(char: string) {
+        this.lineStart = this.line;
+        this.colStart = this.col;
 
-    private processState(char: string) {}
+        if (/\s/.test(char)) {
+            this.advance(); // Skip whitespace
+        } else if (/[a-zA-Z_]/.test(char)) {
+            this.state = State.Identifier;
+            this.buffer += this.advance();
+        } else if (/[0-9]/.test(char)) {
+            this.state = State.Number;
+            this.buffer += this.advance();
+        } else if (Quotes.has(char)) {
+            this.isRaw = char === StringQuotes.Raw;
+            this.quoteType = char as StringType;
+            this.state = State.String;
+            this.advance();
+        } else if (char === "/") {
+            const next = this.peek(1);
+
+            if (next === "/") {
+                this.state = State.SingleComment;
+                this.advance(2);
+            } else if (next === "*") {
+                const isDoc = this.peek(2) === "*" && this.peek(3) !== "/";
+
+                this.state = isDoc ? State.DocComment : State.MultiComment;
+                this.advance(isDoc ? 3 : 2);
+            } else {
+                this.advance();
+                this.error("Unexpected `/` (expected `//`, `/*` or `/**`)");
+            }
+        } else if (Symbols.has(char)) {
+            this.buffer = char;
+            this.advance();
+            this.emit(char as SymbolTokType);
+        } else {
+            this.advance();
+            this.error(`Unexpected character ${JSON.stringify(char)}`);
+        }
+    }
+
+    private processState(char: string) {
+        switch (this.state) {
+            case State.String:
+                if (this.isEscaped) {
+                    this.buffer += StringEscapes[char] ?? char;
+                    this.isEscaped = false;
+                    this.advance();
+                    break;
+                }
+                if (char === "\\" && !this.isRaw) {
+                    this.isEscaped = true;
+                    this.advance();
+                    break;
+                }
+                if (char === this.quoteType) {
+                    this.emit("String");
+                    this.advance();
+                    break;
+                }
+
+                this.buffer += char;
+                this.advance();
+                break;
+            case State.Number:
+                if (/[0-9]/.test(char)) { // This was a fun line to write lol
+                    this.buffer += char;
+                    this.advance();
+                    break;
+                }
+
+                this.emit("Number");
+                break;
+            case State.Identifier:
+                if (/[a-zA-Z0-9_]/.test(char)) {
+                    this.buffer += char;
+                    this.advance();
+                    break;
+                }
+
+                this.emitWord();
+                break;
+
+            case State.SingleComment:
+                if (char === "\n") {
+                    this.emit("CommentSingle");
+                    break;
+                }
+
+                this.buffer += char;
+                this.advance();
+                break;
+
+            case State.MultiComment:
+            case State.DocComment:
+                if (char === "*" && this.peek(1) === "/") {
+                    const type = this.state === State.DocComment ? "CommentDoc" : "CommentMulti";
+                    this.advance(2);
+                    this.emit(type);
+                    break;
+                }
+
+                this.buffer += char;
+                this.advance();
+                break;
+        }
+    }
 }

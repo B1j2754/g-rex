@@ -41,9 +41,6 @@ export const KwardTokType = {
     IgnoreCase: "ignoreCase",
     ByLine: "byLine",
     DotAll: "dotAll",
-
-    // Literal prefix
-    Raw: "raw",
 } as const;
 
 export const SymbolTokType = {
@@ -60,6 +57,7 @@ export const SymbolTokType = {
     Pipe: "|", // Branch seperator inside `either`
     Equals: "=", // Binds a `let` or `def` body
     Colon: ":",
+    Comma: ",", // Separates set members and capture assertions
     AtSymbol: "@", // Directive prefix
 
     // Misc
@@ -74,6 +72,7 @@ export const MiscTokType = {
 
     // Misc
     String: "String",
+    Number: "Number",
     Identifier: "Identifier",
 
     // Error
@@ -85,6 +84,9 @@ export type MiscTokType = typeof MiscTokType[keyof typeof MiscTokType];
 export type SymbolTokType = typeof SymbolTokType[keyof typeof SymbolTokType];
 
 export type TokType = SymbolTokType | KwardTokType | MiscTokType;
+
+export const Keywords = new Set<string>(Object.values(KwardTokType));
+export const Symbols = new Set<string>(Object.values(SymbolTokType));
 
 // --- Token Structure ---
 export interface TokInfo {
