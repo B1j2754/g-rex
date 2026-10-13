@@ -5,7 +5,7 @@ import { Diagnostics } from "../diagnostics/Diagnostics";
 
 /** Lex `src`, returning the [type, value] pairs plus the run's diagnostics. */
 function lex(src: string) {
-    const diagnostics = new Diagnostics();
+    const diagnostics = new Diagnostics(src);
     const tokens = new Lexer(diagnostics)
         .tokenize(src)
         .map((t) => [t.info.type, t.info.value]);
@@ -50,28 +50,47 @@ test("words, numbers and symbols", () => {
         ["Identifier", "my_2nd"],
     ]);
 
-    // No trailing whitespace to close the last token.
+    // No trailing whitespace to close the last token. `..` is one token, so a
+    // range never collides with the member access in `unicode.Greek`.
     expect(lex("1..5").tokens).toEqual([
         ["Number", "1"],
-        [".", "."],
-        [".", "."],
+        ["..", ".."],
         ["Number", "5"],
+    ]);
+    expect(lex("unicode.Greek").tokens).toEqual([
+        ["Identifier", "unicode"],
+        [".", "."],
+        ["Identifier", "Greek"],
     ]);
     expect(lex("repeat").tokens).toEqual([["repeat", "repeat"]]);
 });
 
 test("strings", () => {
+    // One token type per quote style: literal text, one character, raw regex.
     expect(lex('"a b"').tokens).toEqual([["String", "a b"]]);
-    expect(lex("'  padded  '").tokens).toEqual([["String", "  padded  "]]);
+    expect(lex("'  padded  '").tokens).toEqual([["Char", "  padded  "]]);
+    expect(lex("`raw`").tokens).toEqual([["Raw", "raw"]]);
 
     // Escapes: the closing quote must still close the string afterwards.
     expect(lex('"a\\"b\\\\c\\nd\\qe"').tokens).toEqual([["String", 'a"b\\c\nd' + "qe"]]);
 
-    // Backticks keep backslashes for the parser; quoted strings are cooked.
+    // Backticks keep backslashes for the emitter; quoted strings are cooked.
     expect(lex('`\\d+` "\\d"').tokens).toEqual([
-        ["String", "\\d+"],
+        ["Raw", "\\d+"],
         ["String", "d"],
     ]);
+});
+
+test("codepoint escapes", () => {
+    expect(lex('"\\u0041"').tokens).toEqual([["String", "A"]]);
+    expect(lex('"\\x41"').tokens).toEqual([["String", "A"]]);
+    expect(lex('"\\u{1F600}"').tokens).toEqual([["String", "\u{1F600}"]]);
+
+    // A raw string is not cooked, so the escape text survives verbatim.
+    expect(lex("`\\u0041`").tokens).toEqual([["Raw", "\\u0041"]]);
+
+    expect(lex('"\\u{12"').diagnostics.hasErrors).toBe(true);
+    expect(lex('"\\uZZZZ"').diagnostics.hasErrors).toBe(true);
 });
 
 test("errors are reported and recovered from", () => {
@@ -87,4 +106,13 @@ test("errors are reported and recovered from", () => {
     const recovered = lex("# // after");
     expect(recovered.tokens.map((t) => t[0])).toEqual(["ErrorTok", "CommentSingle"]);
     expect(recovered.diagnostics.hasErrors).toBe(true);
+});
+
+test("diagnostics render the offending line with carets", () => {
+    const src = "let x = #\n";
+    const diagnostics = new Diagnostics(src);
+    new Lexer(diagnostics).tokenize(src);
+
+    expect(diagnostics.format()).toContain("let x = #");
+    expect(diagnostics.format()).toContain("^");
 });

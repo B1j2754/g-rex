@@ -50,7 +50,8 @@ export const SymbolTokType = {
     ParenOpen: "(", ParenClose: ")", // Precedence grouping, param list, call args
 
     // Operators
-    Dot: ".", // Two of them make a 'range' op
+    Dot: ".", // Member access: `unicode.Greek`
+    DotDot: "..", // Range: `'a'..'f'`, `2..5`
     Plus: "+", // Set union
     Minus: "-", // Set differences
     Ampersand: "&", // Set intersections
@@ -70,8 +71,12 @@ export const MiscTokType = {
     CommentMulti: "CommentMulti",
     CommentDoc: "CommentDoc",
 
-    // Misc
+    // Literals. The three quote styles mean three different things, so they
+    // stay three token types: "text" is literal text, 'c' is one character
+    // (the only thing a range endpoint may be), `raw` is verbatim regex.
     String: "String",
+    Char: "Char",
+    Raw: "Raw",
     Number: "Number",
     Identifier: "Identifier",
 

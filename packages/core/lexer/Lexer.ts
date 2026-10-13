@@ -18,6 +18,12 @@ const Quotes = new Set<string>(Object.values(StringQuotes));
 
 const StringEscapes: Record<string, string> = { n: "\n", t: "\t", r: "\r", "0": "\0" };
 
+/** Which token type each quote style produces. */
+const QuoteToken = { '"': "String", "'": "Char", "`": "Raw" } as const satisfies Record<StringType, TokType>;
+
+/** Token types whose value is user text, so `emit` must not trim it. */
+const Verbatim = new Set<TokType>(["String", "Char", "Raw"]);
+
 export class Lexer {
     // Position tracking
     private src: string = "";
@@ -128,7 +134,7 @@ export class Lexer {
     }
 
     private emit(type: TokType) {
-        if (type !== "String") this.buffer = this.buffer.trim();
+        if (!Verbatim.has(type)) this.buffer = this.buffer.trim();
 
         this.tokens.push({
             info: { type, value: this.buffer },
@@ -155,6 +161,33 @@ export class Lexer {
 
         this.buffer = message;
         this.emit("ErrorTok");
+    }
+
+    /**
+     * Reads the digits of a `\xHH`, `\uHHHH` or `\u{H..}` escape, already past the
+     * backslash, with `kind` the x or u. A malformed escape is reported and dropped,
+     * so lexing still moves forward.
+     */
+    private readCodepointEscape(kind: "u" | "x") {
+        this.advance(); // the u or x
+
+        const braced = kind === "u" && this.peek() === "{";
+        if (braced) this.advance();
+
+        const want = braced ? Infinity : kind === "x" ? 2 : 4;
+        let digits = "";
+        while (digits.length < want && /[0-9a-fA-F]/.test(this.peek() ?? "")) digits += this.advance();
+
+        if (braced) {
+            if (this.peek() !== "}") return this.error("Unterminated `\\u{...}` escape (expected `}`)");
+            this.advance();
+        }
+
+        const code = parseInt(digits, 16);
+        if (digits.length === 0 || code > 0x10ffff)
+            return this.error(`Invalid \\${kind} escape ${JSON.stringify(digits)}`);
+
+        this.buffer += String.fromCodePoint(code);
     }
 
     // --- Main Logic ---
@@ -197,6 +230,10 @@ export class Lexer {
                 this.advance();
                 this.error("Unexpected `/` (expected `//`, `/*` or `/**`)");
             }
+        } else if (char === "." && this.peek(1) === ".") {
+            this.buffer = "..";
+            this.advance(2);
+            this.emit("..");
         } else if (Symbols.has(char)) {
             this.buffer = char;
             this.advance();
@@ -211,9 +248,12 @@ export class Lexer {
         switch (this.state) {
             case State.String:
                 if (this.isEscaped) {
-                    this.buffer += StringEscapes[char] ?? char;
                     this.isEscaped = false;
-                    this.advance();
+                    if (char === "u" || char === "x") this.readCodepointEscape(char);
+                    else {
+                        this.buffer += StringEscapes[char] ?? char;
+                        this.advance();
+                    }
                     break;
                 }
                 if (char === "\\" && !this.isRaw) {
@@ -222,7 +262,7 @@ export class Lexer {
                     break;
                 }
                 if (char === this.quoteType) {
-                    this.emit("String");
+                    this.emit(QuoteToken[this.quoteType]);
                     this.advance();
                     break;
                 }

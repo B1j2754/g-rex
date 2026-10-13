@@ -1,12 +1,37 @@
 {
     "name": "grex-vscode",
     "displayName": "g-rex",
+    "description": "Syntax highlighting and live compiler diagnostics for g-rex (.grex).",
     "version": "0.0.1",
-    "private": true,
+    "publisher": "B1j2754",
+    "license": "Apache-2.0",
+    "homepage": "https://github.com/B1j2754/g-rex#readme",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/B1j2754/g-rex",
+        "directory": "packages/vscode"
+    },
+    "bugs": {
+        "url": "https://github.com/B1j2754/g-rex/issues"
+    },
+    "keywords": [
+        "grex",
+        "g-rex",
+        "regex",
+        "regular expression",
+        "language"
+    ],
+    "categories": [
+        "Programming Languages",
+        "Linters"
+    ],
     "engines": {
         "vscode": "^1.90.0"
     },
     "main": "./dist/extension.cjs",
+    "activationEvents": [
+        "onLanguage:grex"
+    ],
     "contributes": {
         "languages": [
             {
@@ -35,10 +60,13 @@
         "@g-rex/core": "workspace:*"
     },
     "devDependencies": {
-        "@types/vscode": "^1.90.0"
+        "@types/vscode": "^1.90.0",
+        "@vscode/vsce": "^3.2.0"
     },
     "scripts": {
         "typecheck": "tsc --noEmit",
-        "build": "bun build ./src/extension.ts --outfile ./dist/extension.cjs --format cjs --target node --external vscode"
+        "build": "bun build ./src/extension.ts --outfile ./dist/extension.cjs --format cjs --target node --external vscode",
+        "package": "bun run build && vsce package --no-dependencies",
+        "test": "bun test"
     }
 }

@@ -1,0 +1,204 @@
+{
+    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+    "name": "g-rex",
+    "scopeName": "source.grex",
+    "patterns": [
+        { "include": "#comments" },
+        { "include": "#directives" },
+        { "include": "#declarations" },
+        { "include": "#strings" },
+        { "include": "#keywords" },
+        { "include": "#prelude" },
+        { "include": "#numbers" },
+        { "include": "#operators" },
+        { "include": "#identifiers" }
+    ],
+    "repository": {
+        "comments": {
+            "patterns": [
+                {
+                    "name": "comment.block.documentation.grex",
+                    "begin": "/\\*\\*(?!/)",
+                    "end": "\\*/"
+                },
+                {
+                    "name": "comment.block.grex",
+                    "begin": "/\\*",
+                    "end": "\\*/"
+                },
+                {
+                    "name": "comment.line.double-slash.grex",
+                    "begin": "//",
+                    "end": "$"
+                }
+            ]
+        },
+
+        "directives": {
+            "match": "(@)(flavor|flags)\\b",
+            "captures": {
+                "1": { "name": "punctuation.definition.directive.grex" },
+                "2": { "name": "keyword.control.directive.grex" }
+            }
+        },
+
+        "declarations": {
+            "patterns": [
+                {
+                    "comment": "A pattern or test names a pattern, which is a type-like thing.",
+                    "match": "\\b(pattern|test)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+                    "captures": {
+                        "1": { "name": "keyword.declaration.grex" },
+                        "2": { "name": "entity.name.type.grex" }
+                    }
+                },
+                {
+                    "match": "\\b(def)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+                    "captures": {
+                        "1": { "name": "keyword.declaration.grex" },
+                        "2": { "name": "entity.name.function.grex" }
+                    }
+                },
+                {
+                    "match": "\\b(let)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+                    "captures": {
+                        "1": { "name": "keyword.declaration.grex" },
+                        "2": { "name": "variable.other.definition.grex" }
+                    }
+                },
+                {
+                    "comment": "`capture name` and `ref name` both take a bare name, never an expression.",
+                    "match": "\\b(capture|ref)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+                    "captures": {
+                        "1": { "name": "keyword.control.grex" },
+                        "2": { "name": "variable.other.capture.grex" }
+                    }
+                }
+            ]
+        },
+
+        "strings": {
+            "patterns": [
+                {
+                    "comment": "Literal text, auto-escaped on emit.",
+                    "name": "string.quoted.double.grex",
+                    "begin": "\"",
+                    "end": "\"",
+                    "patterns": [{ "include": "#escapes" }]
+                },
+                {
+                    "comment": "Exactly one character; the only thing a range endpoint may be.",
+                    "name": "string.quoted.single.grex",
+                    "begin": "'",
+                    "end": "'",
+                    "patterns": [{ "include": "#escapes" }]
+                },
+                {
+                    "comment": "Raw: verbatim regex, or a test subject. Backslashes are not escapes here.",
+                    "name": "string.quoted.other.raw.grex",
+                    "begin": "`",
+                    "end": "`"
+                }
+            ]
+        },
+
+        "escapes": {
+            "patterns": [
+                {
+                    "name": "constant.character.escape.grex",
+                    "match": "\\\\(?:u\\{[0-9A-Fa-f]+\\}|u[0-9A-Fa-f]{4}|x[0-9A-Fa-f]{2}|.)"
+                }
+            ]
+        },
+
+        "keywords": {
+            "patterns": [
+                {
+                    "name": "keyword.declaration.grex",
+                    "match": "\\b(let|def|pattern|test)\\b"
+                },
+                {
+                    "name": "keyword.control.grex",
+                    "match": "\\b(capture|either|optional|repeat|ref|not)\\b"
+                },
+                {
+                    "comment": "Repetition modes, which only follow `repeat`.",
+                    "name": "storage.modifier.grex",
+                    "match": "\\b(greedy|lazy|atomic)\\b"
+                },
+                {
+                    "name": "keyword.control.lookaround.grex",
+                    "match": "\\b(ahead|notAhead|behind|notBehind)\\b"
+                },
+                {
+                    "name": "storage.modifier.flag.grex",
+                    "match": "\\b(ignoreCase|byLine|dotAll)\\b"
+                },
+                {
+                    "name": "keyword.control.assert.grex",
+                    "match": "\\b(match|reject)\\b"
+                }
+            ]
+        },
+
+        "prelude": {
+            "comment": "Built-in bindings, not keywords: any of these may be shadowed.",
+            "patterns": [
+                {
+                    "name": "support.constant.anchor.grex",
+                    "match": "\\b(start|end|textStart|textEnd|wordBoundary|notWordBoundary|linebreak)\\b"
+                },
+                {
+                    "name": "support.constant.class.grex",
+                    "match": "\\b(digit|letter|word|space|any)\\b"
+                },
+                {
+                    "comment": "`unicode.Greek` — the namespace, then the property.",
+                    "match": "\\b(unicode)(?:(\\.)([A-Za-z_][A-Za-z0-9_]*))?",
+                    "captures": {
+                        "1": { "name": "support.class.unicode.grex" },
+                        "2": { "name": "punctuation.accessor.grex" },
+                        "3": { "name": "support.constant.property.grex" }
+                    }
+                }
+            ]
+        },
+
+        "numbers": {
+            "name": "constant.numeric.grex",
+            "match": "\\b[0-9]+\\b"
+        },
+
+        "operators": {
+            "patterns": [
+                {
+                    "comment": "Range, as in `'a'..'f'` and `2..5`.",
+                    "name": "keyword.operator.range.grex",
+                    "match": "\\.\\."
+                },
+                {
+                    "comment": "Set algebra: union, difference, intersection.",
+                    "name": "keyword.operator.set.grex",
+                    "match": "[+\\-&]"
+                },
+                {
+                    "name": "keyword.operator.alternation.grex",
+                    "match": "\\|"
+                },
+                {
+                    "name": "keyword.operator.assignment.grex",
+                    "match": "="
+                },
+                {
+                    "name": "punctuation.separator.grex",
+                    "match": "[,:]"
+                }
+            ]
+        },
+
+        "identifiers": {
+            "name": "variable.other.grex",
+            "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b"
+        }
+    }
+}

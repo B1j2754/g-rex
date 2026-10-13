@@ -1,0 +1,170 @@
+/**
+ * kitchen-sink.grex -- every construct in g-rex.
+ * Source extension is .grex; .grex.txt is accepted as an alias so the file renders as 
+    plain text in editors and viewers that don't know .grex yet.
+ * Compiling this must reproduce EXPECTED.md exactly.
+ * Lines tagged [js] / [re2] must FAIL under those flavors. That's the test.
+ */
+
+@flavor pcre
+@flags unicode
+
+/* ── the five bracket types, one meaning each ────────────────────────────
+     " "   literal text, auto-escaped, JS escape sequences
+     ' '   one character (used for ranges)
+     [ ]   a SET of characters — matches one of them
+     { }   a SEQUENCE — matches these in order
+     ( )   precedence only, emits nothing
+
+   Every operator takes a { } block, so its argument always has a visible
+   end. The only bare identifier after a keyword is a *name*, never an
+   expression: `capture year { }`, `ref year`.
+
+   Reserved: let def pattern test capture either optional repeat lazy
+   atomic greedy ahead notAhead behind notBehind not ref ignoreCase
+   byLine dotAll match reject
+   Everything else — digit letter word space any start end textStart
+   textEnd wordBoundary notWordBoundary linebreak unicode — is a prelude
+   binding and may be shadowed. */
+
+
+/* ── character sets and set algebra ─────────────────────────────────── */
+
+let vowel     = ["aeiou"]                    // a string in [ ] means its chars
+let hexit     = [digit, 'a'..'f', 'A'..'F']  // union, merges to one bracket
+let pathish   = [word, '-', '.']
+let consonant = letter - vowel               // difference
+let greek     = letter & unicode.Greek       // intersection
+
+// Algebra operands must be sets or single chars. `word + "ab"` is a type
+// error; write `word + ["ab"]`.
+
+
+/* ── definitions: compile-time macros, always inlined ───────────────── */
+
+/** Exactly n decimal digits. */
+def digits(n) = repeat n { digit }
+
+/** Wraps a block argument in double quotes. */
+def quoted(inner) = { "\"" inner "\"" }
+
+// Value args go in ( ). A block arg trails: `quoted { ... }`.
+// A def has no call frame; a cycle in the def/let graph is a hard error.
+
+
+/* ── 0-255, order-sensitive: earlier branches win ───────────────────── */
+
+let octet = either {
+  { "25" ['0'..'5'] }
+  { "2" ['0'..'4'] digit }
+  { "1" repeat 2 { digit } }
+  { ['1'..'9'] digit }
+  digit
+}
+
+
+/* ── pattern 1: backreference ───────────────────────────────────────── */
+
+/** A single- or double-quoted string, closing on the same quote it opened. */
+pattern QuotedString {
+  capture quote { ["\"'"] }
+  capture body  { repeat lazy { any } }
+  ref quote
+}
+
+
+/* ── pattern 2: a combined-log-format line ──────────────────────────── */
+
+pattern LogLine {
+  start
+
+  capture ip {
+    octet
+    repeat 3 { "." octet }        // octet is inlined 4x — see EXPECTED note 5
+  }
+
+  space "-" space
+
+  capture user { repeat 1.. { pathish } }
+
+  space
+  "["
+  capture time {
+    digits(2) "/" repeat 3 { letter } "/" digits(4)
+    ":" digits(2) ":" digits(2) ":" digits(2)
+    space ['+', '-'] digits(4)
+  }
+  "]"
+
+  space
+  quoted {
+    capture method {
+      ignoreCase {
+        either { "GET" "POST" "PUT" "PATCH" "DELETE" "HEAD" "OPTIONS" }
+      }
+    }
+    " "
+    capture path { "/" repeat lazy { not space } }
+    optional { "?" capture query { repeat 1.. { not [' ', '"'] } } }
+    " HTTP/"
+    capture version { digit "." digit }
+  }
+
+  space
+  capture status { notAhead { "0" } repeat 3 { digit } }
+  space
+  capture bytes { either { "-" repeat 1.. atomic { digit } } }
+
+  end
+}
+
+
+/* ── pattern 3: deliberately synthetic ──────────────────────────────────
+   Reaches only the constructs the two realistic patterns above miss.
+   Not meant to match anything useful. */
+
+pattern Stragglers {
+  textStart                                // \A                    [js]
+  notBehind { `\\` }                       //                      [re2]
+  behind { "$" }
+  wordBoundary
+  capture { repeat 2..5 atomic { hexit } } // unnamed group         [js]
+  notWordBoundary
+  either {
+    greek
+    consonant
+    not digit
+    "\u{1F600}"                            // escape in a literal
+  }
+  byLine { start "#" }                     // scoped (?m:)
+  dotAll { repeat 1.. { any } }            // scoped (?s:)
+  optional { ref 1 }                       // numeric backreference
+  ahead { textEnd }
+  textEnd                                  //                       [js]
+}
+
+
+/* ── inline tests: why this file can be the source of truth ─────────────
+   Backtick strings are raw subjects. `match` asserts a match and that each
+   listed capture bound to that text; `reject` asserts no match.
+   Run with: grex test kitchen-sink.grex.txt */
+
+test QuotedString {
+  match  `"hello"`  { quote: `"`, body: `hello` }
+  match  `'hi'`     { quote: `'`, body: `hi` }
+  reject `"unterminated`
+  reject `"mismatched'`
+}
+
+test LogLine {
+  match `127.0.0.1 - alice [10/Oct/2000:13:55:36 -0700] "GET /pb.gif?a=1 HTTP/1.0" 200 2326` {
+    ip: `127.0.0.1`, user: `alice`, method: `GET`,
+    path: `/pb.gif`, query: `a=1`, version: `1.0`,
+    status: `200`, bytes: `2326`
+  }
+  match `10.0.0.7 - - [10/Oct/2000:13:55:36 -0700] "post /x HTTP/1.1" 404 -` {
+    bytes: `-`, method: `post`
+  }
+  reject `256.0.0.1 - - [10/Oct/2000:13:55:36 -0700] "GET / HTTP/1.0" 200 0`
+  reject `127.0.0.1 - - [10/Oct/2000:13:55:36 -0700] "GET / HTTP/1.0" 099 0`
+}

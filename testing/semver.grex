@@ -1,0 +1,46 @@
+@flavor js
+@flags unicode
+
+/* Semantic Versioning 2.0.0 — semver.org */
+
+let alnum = ['a'..'z', 'A'..'Z', digit, '-']
+
+/** A version number: no leading zeros. Order matters — "0" must come first. */
+let numeric = either {
+  "0"
+  | { ['1'..'9'] repeat { digit } }
+}
+
+/** A prerelease part: numeric, or anything containing a non-digit. */
+let preId = either {
+  numeric
+  | { repeat { digit } ['a'..'z', 'A'..'Z', '-'] repeat { alnum } }
+}
+
+let buildId = repeat 1.. { alnum }
+
+/** X, or X.X, or X.X.X … */
+def dotted(part) = { part repeat { "." part } }
+
+pattern SemVer {
+  start
+
+  capture major { numeric } "."
+  capture minor { numeric } "."
+  capture patch { numeric }
+
+  optional { "-" capture prerelease { dotted(preId) } }
+  optional { "+" capture build      { dotted(buildId) } }
+
+  end
+}
+
+test SemVer {
+  match `1.0.0`                  { major: `1`, minor: `0`, patch: `0` }
+  match `1.0.0-alpha.1`          { prerelease: `alpha.1` }
+  match `1.0.0-0.3.7+build.11`   { prerelease: `0.3.7`, build: `build.11` }
+  match `10.20.30`               { major: `10` }
+  reject `01.0.0`                // leading zero
+  reject `1.0.0-`                // empty prerelease
+  reject `1.2`                   // missing patch
+}
