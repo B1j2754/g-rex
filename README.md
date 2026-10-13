@@ -3,6 +3,10 @@
 A transpiled, human-readable scripting language for constructing complex regex
 patterns cleanly.
 
+**New to g-rex? Start with [LEARN.md](LEARN.md)** — a tutorial that builds up
+from a first pattern to set algebra, macros and flavors. The summary below is the
+reference version.
+
 ```grex
 @flavor js
 @flags unicode
@@ -80,6 +84,7 @@ emitting something that does not work. `textStart` needs `\A`, which JS has no
 spelling for; RE2 has no backreferences or lookaround; only JS has class set
 operations. Pass `--flavor` to check a file against a target other than its own.
 
+[LEARN.md](LEARN.md) covers all of this properly, with worked examples.
 `testing/kitchen-sink.grex` exercises every construct and
 `testing/EXPECTED.md` records what each one compiles to.
 
@@ -127,6 +132,7 @@ Nothing throws for bad input. Every entry point returns
 ## Layout
 
 ```
+LEARN.md          the tutorial
 packages/core     the compiler: lexer → parser → ir → emit
 packages/cli      the `grex` command
 packages/vscode   syntax highlighting and live diagnostics
